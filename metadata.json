@@ -1,0 +1,5 @@
+{
+  "name": "🔎 Translation Checker Pro + Gemini",
+  "description": "A robust offline localization QA tool with JSON validation, rule-based analysis, and Gemini AI integration for automated fixes.",
+  "requestFramePermissions": []
+}
