@@ -5,11 +5,25 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 
 interface StatsProps {
   issues: Issue[];
   ignoredIds: Set<string>;
+  uiLanguage: 'zh' | 'en';
 }
 
-export const Stats: React.FC<StatsProps> = ({ issues, ignoredIds }) => {
+export const Stats: React.FC<StatsProps> = ({ issues, ignoredIds, uiLanguage }) => {
   const activeIssues = issues.filter(i => !ignoredIds.has(i.id));
   
+  const T = {
+    zh: {
+      dist: "问题分布",
+      total: "总问题数",
+      unique: "唯一 Key"
+    },
+    en: {
+      dist: "Issue Distribution",
+      total: "Total Issues",
+      unique: "Unique Keys"
+    }
+  }[uiLanguage];
+
   const counts = {
     critical: activeIssues.filter(i => i.severity === 'critical').length,
     high: activeIssues.filter(i => i.severity === 'high').length,
@@ -29,7 +43,7 @@ export const Stats: React.FC<StatsProps> = ({ issues, ignoredIds }) => {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
       <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
-        <h3 className="text-sm font-semibold text-slate-300 mb-2">Issue Distribution</h3>
+        <h3 className="text-sm font-semibold text-slate-300 mb-2">{T.dist}</h3>
         <div className="h-40">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={data} layout="vertical" margin={{ left: 10, right: 10 }}>
@@ -52,11 +66,11 @@ export const Stats: React.FC<StatsProps> = ({ issues, ignoredIds }) => {
       
       <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700 grid grid-cols-2 gap-2">
         <div className="flex flex-col items-center justify-center p-2 bg-slate-800 rounded-lg">
-          <span className="text-xs text-slate-400">Total Issues</span>
+          <span className="text-xs text-slate-400">{T.total}</span>
           <span className="text-2xl font-bold text-white">{activeIssues.length}</span>
         </div>
          <div className="flex flex-col items-center justify-center p-2 bg-slate-800 rounded-lg">
-          <span className="text-xs text-slate-400">Unique Keys</span>
+          <span className="text-xs text-slate-400">{T.unique}</span>
           <span className="text-2xl font-bold text-white">{new Set(activeIssues.map(i => i.key)).size}</span>
         </div>
       </div>

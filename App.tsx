@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { Upload, FileCode, Play, Download, MessageSquare, ChevronDown, ChevronRight, AlertTriangle, RefreshCcw, Wand2, Trash2, Microscope, Sparkles, Copy, ClipboardList } from 'lucide-react';
+import { Upload, FileCode, Play, Download, MessageSquare, ChevronDown, ChevronRight, AlertTriangle, RefreshCcw, Wand2, Trash2, Microscope, Sparkles, Copy, ClipboardList, Languages, Globe } from 'lucide-react';
 import { parseAndNormalize, buildKeyLineMap } from './services/parser';
 import { createDefaultRules } from './services/ruleEngine';
 import { AppState, AnalysisOptions, Rule, TranslationItem } from './types';
@@ -13,8 +13,96 @@ const DEFAULT_JSON = `[
   {"key":"errors.network","en-US":"Network error. Try again.","fr-FR":"","zh-CN":"网络错误。请重试。"}
 ]`;
 
+const UI_STRINGS = {
+  zh: {
+    appTitle: "Translation Checker Pro",
+    appSubtitle: "深度语言学质量评估 (Linguistic QA)",
+    inputData: "输入数据",
+    runAnalysis: "运行分析",
+    linguisticAudit: "语言学审计 (AI)",
+    rules: "活动规则",
+    resultsTab: "分析结果",
+    aiTab: "Gemini 审计专家",
+    parsedToast: (count: number) => `已解析 ${count} 个条目。`,
+    analyzeDone: (count: number) => `完成。发现 ${count} 个规则违规。`,
+    noItemsAudit: "没有条目可供审计。",
+    noIssues: "没有问题。",
+    copyReportOk: "分析报告已复制到剪贴板",
+    copyLiteOk: "精简简报已复制 (按语种分组)",
+    copyFail: "复制失败",
+    copyAiOk: "审计内容已复制到剪贴板",
+    noContentExport: "无内容可导出",
+    exportOk: "审计报告已导出",
+    searchPlaceholder: "搜索 key 或内容...",
+    allIssues: "所有问题",
+    criticalOnly: "仅致命错误",
+    highPlus: "高严重性及以上",
+    liteReport: "复制精简报告 (Lite)",
+    fullReport: "复制完整报告 (MD)",
+    exportReport: "导出报告",
+    copyContent: "复制内容",
+    exportAiReport: "导出报告",
+    welcomeAi: "欢迎使用 AI 审计助手。我可以审查翻译的语法、风格和文化细微差别——即使没有源文也可以进行评估。",
+    runAuditBtn: "🚀 运行深度质量审计报告",
+    fixIssuesBtn: "🛠 自动修复规则违规",
+    inputPlaceholder: "向专家咨询语言建议...",
+    generating: "正在生成审计报告...",
+    source: "源文",
+    target: "目标",
+    fix: "修复",
+    unilingualTag: "单语评估模式 (Unilingual)",
+    aiRoleDesc: "你是一名世界级的资深本地化质量审计专家，擅长多语种本地化审计与评估。",
+    aiHelpDesc: "你是一名本地化专家。请使用简体中文提供帮助。",
+    analysisWait: "...",
+    allLanguages: "所有语言"
+  },
+  en: {
+    appTitle: "Translation Checker Pro",
+    appSubtitle: "Deep Linguistic QA",
+    inputData: "Input Data",
+    runAnalysis: "Run Analysis",
+    linguisticAudit: "Linguistic Audit (AI)",
+    rules: "Active Rules",
+    resultsTab: "Analysis Results",
+    aiTab: "Gemini Audit Expert",
+    parsedToast: (count: number) => `Parsed ${count} items.`,
+    analyzeDone: (count: number) => `Done. Found ${count} rule violations.`,
+    noItemsAudit: "No items to audit.",
+    noIssues: "No issues.",
+    copyReportOk: "Report copied to clipboard",
+    copyLiteOk: "Lite report copied (Grouped by Locale)",
+    copyFail: "Copy failed",
+    copyAiOk: "Audit content copied to clipboard",
+    noContentExport: "No content to export",
+    exportOk: "Audit report exported",
+    searchPlaceholder: "Search key or content...",
+    allIssues: "All Issues",
+    criticalOnly: "Critical Only",
+    highPlus: "High Severity+",
+    liteReport: "Copy Lite Report",
+    fullReport: "Copy Full Report (MD)",
+    exportReport: "Export Report",
+    copyContent: "Copy Content",
+    exportAiReport: "Export Report",
+    welcomeAi: "Welcome to the AI Audit Assistant. I can review translation grammar, style, and cultural nuances—even without source text.",
+    runAuditBtn: "🚀 Run Deep Quality Audit Report",
+    fixIssuesBtn: "🛠 Auto-fix Rule Violations",
+    inputPlaceholder: "Ask expert for linguistic advice...",
+    generating: "Generating audit report...",
+    source: "Source",
+    target: "Target",
+    fix: "Fix",
+    unilingualTag: "Unilingual Mode",
+    aiRoleDesc: "You are a world-class senior localization quality audit expert, specializing in multilingual localization audit and assessment.",
+    aiHelpDesc: "You are a localization expert. Please provide help in English.",
+    analysisWait: "...",
+    allLanguages: "All Languages"
+  }
+};
+
 export default function App() {
   // --- State ---
+  const [uiLanguage, setUiLanguage] = useState<'zh' | 'en'>('zh');
   const [rawText, setRawText] = useState(DEFAULT_JSON);
   const [sourceLocale, setSourceLocale] = useState('en-US');
   const [targetLocales, setTargetLocales] = useState<string[]>([]);
@@ -25,7 +113,10 @@ export default function App() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [activeTab, setActiveTab] = useState<'results' | 'ai'>('results');
   const [toasts, setToasts] = useState<{id: number, msg: string, type: 'ok'|'warn'|'bad'|'info'}[]>([]);
+  
+  // Filters
   const [filterSeverity, setFilterSeverity] = useState<string>('all');
+  const [filterLocale, setFilterLocale] = useState<string>('all');
   const [filterText, setFilterText] = useState('');
   
   // AI State
@@ -49,17 +140,19 @@ export default function App() {
 
   // --- Effects ---
   useEffect(() => {
-    const defaultRules = createDefaultRules(sourceLocale, options);
+    const defaultRules = createDefaultRules(sourceLocale, options, uiLanguage);
     setRules(defaultRules);
     setEnabledRuleIds(new Set(defaultRules.map(r => r.id)));
     listModels().then(setAvailableModels);
-  }, [sourceLocale, options]);
+  }, [sourceLocale, options, uiLanguage]);
 
   useEffect(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatHistory]);
 
   // --- Helpers ---
+  const ui = UI_STRINGS[uiLanguage];
+
   const addToast = (msg: string, type: 'ok'|'warn'|'bad'|'info' = 'info') => {
     setToasts(prev => [...prev, { id: Date.now(), msg, type }]);
   };
@@ -75,11 +168,11 @@ export default function App() {
         setSourceLocale(likelySource);
       }
       setTargetLocales(detectedLocales.filter(l => l !== likelySource));
-      addToast(`Parsed ${items.length} items.`, 'ok');
+      addToast(ui.parsedToast(items.length), 'ok');
     } catch (e: any) {
       addToast(e.message, 'bad');
     }
-  }, [rawText, sourceLocale]);
+  }, [rawText, sourceLocale, ui]);
 
   const handleAnalyze = useCallback(async () => {
     handleParse();
@@ -89,7 +182,7 @@ export default function App() {
     try {
       const { items, locales: allLocales } = parseAndNormalize(rawText);
       const keyLineMap = buildKeyLineMap(rawText);
-      const currentRules = createDefaultRules(sourceLocale, options);
+      const currentRules = createDefaultRules(sourceLocale, options, uiLanguage);
       const activeRules = currentRules.filter(r => enabledRuleIds.has(r.id));
       
       const newIssues: AppState['issues'] = [];
@@ -128,23 +221,23 @@ export default function App() {
 
       setIssues(newIssues);
       setIgnoredIssues(new Set());
-      addToast(`Done. Found ${newIssues.length} rule violations.`, 'ok');
+      addToast(ui.analyzeDone(newIssues.length), 'ok');
       setActiveTab('results');
     } catch (e: any) {
       addToast(e.message, 'bad');
     } finally {
       setIsAnalyzing(false);
     }
-  }, [rawText, sourceLocale, targetLocales, options, enabledRuleIds, handleParse]);
+  }, [rawText, sourceLocale, targetLocales, options, enabledRuleIds, handleParse, uiLanguage, ui]);
 
   const handleLinguisticAudit = async () => {
     const activeItems = parsedItems.slice(0, 15); // Batch limit for performance
     if (activeItems.length === 0) {
-      addToast("No items to audit.", 'warn');
+      addToast(ui.noItemsAudit, 'warn');
       return;
     }
 
-    const prompt = `请对以下 JSON 本地化数据进行深度语言质量审计。
+    const promptZh = `请对以下 JSON 本地化数据进行深度语言质量审计。
 请严格使用简体中文输出一份结构化的 Markdown 报告。
 
 评估维度：
@@ -163,14 +256,35 @@ export default function App() {
 - 请使用简体中文撰写报告。
 - 针对具体的 key 提出改进建议。`;
 
-    setChatHistory(prev => [...prev, { role: 'user', text: `对 ${activeItems.length} 个条目进行深度语言学审计。` }]);
+    const promptEn = `Please perform a deep linguistic quality audit on the following JSON localization data.
+Please strictly output a structured Markdown report in English.
+
+Evaluation Dimensions:
+1. Grammar Accuracy: Check for grammar errors and sentence structure issues.
+2. Word Choice Appropriateness: Evaluate the accuracy and suitability of vocabulary.
+3. Fluency: Evaluate the naturalness and readability of the language.
+4. Terminology Consistency: Check for consistency in professional terminology.
+5. Style & Tone: Evaluate if the style fits the target audience.
+6. Cultural Adaptability: Check for cultural appropriateness.
+
+Note: If source text (en-US) is missing, evaluate the target language as standalone text.
+
+Data to Audit: ${JSON.stringify(activeItems)}
+
+Output Requirements:
+- Write the report in English.
+- Provide specific improvement suggestions for specific keys.`;
+
+    const prompt = uiLanguage === 'zh' ? promptZh : promptEn;
+
+    setChatHistory(prev => [...prev, { role: 'user', text: prompt }]);
     setActiveTab('ai');
     setIsAiGenerating(true);
 
     try {
       let fullResponse = "";
-      const stream = generateContentStream(aiModel, chatHistory, prompt, "你是一名世界级的资深本地化质量审计专家，擅长多语种本地化审计与评估。");
-      setChatHistory(prev => [...prev, { role: 'model', text: "正在生成审计报告..." }]);
+      const stream = generateContentStream(aiModel, chatHistory, prompt, ui.aiRoleDesc);
+      setChatHistory(prev => [...prev, { role: 'model', text: ui.generating }]);
       
       for await (const chunk of stream) {
         fullResponse += chunk;
@@ -196,8 +310,8 @@ export default function App() {
 
     try {
       let fullResponse = "";
-      const stream = generateContentStream(aiModel, chatHistory, userMsg, "你是一名本地化专家。请使用简体中文提供帮助。");
-      setChatHistory(prev => [...prev, { role: 'model', text: "..." }]);
+      const stream = generateContentStream(aiModel, chatHistory, userMsg, ui.aiHelpDesc);
+      setChatHistory(prev => [...prev, { role: 'model', text: ui.analysisWait }]);
       for await (const chunk of stream) {
         fullResponse += chunk;
         setChatHistory(prev => {
@@ -215,13 +329,17 @@ export default function App() {
 
   const handleGeneratePatch = async () => {
     const visibleIssues = issues.filter(i => !ignoredIssues.has(i.id));
-    if (visibleIssues.length === 0) { addToast("No issues.", 'warn'); return; }
+    if (visibleIssues.length === 0) { addToast(ui.noIssues, 'warn'); return; }
 
-    const prompt = `修复这些翻译问题。如果源文缺失，请优化目标语言的文本质量（流畅度、语法）。请输出 JSON patch 格式：{"patches": [{"key": "...", "locale": "...", "value": "..."}]}。 \n\n问题列表: ${JSON.stringify(visibleIssues.slice(0, 15))}`;
+    const promptZh = `修复这些翻译问题。如果源文缺失，请优化目标语言的文本质量（流畅度、语法）。请输出 JSON patch 格式：{"patches": [{"key": "...", "locale": "...", "value": "..."}]}。 \n\n问题列表: ${JSON.stringify(visibleIssues.slice(0, 15))}`;
+    const promptEn = `Fix these translation issues. If source is missing, optimize target text quality (fluency, grammar). Output in JSON patch format: {"patches": [{"key": "...", "locale": "...", "value": "..."}]}。 \n\nIssue List: ${JSON.stringify(visibleIssues.slice(0, 15))}`;
+    
+    const prompt = uiLanguage === 'zh' ? promptZh : promptEn;
+
     setIsAiGenerating(true);
     try {
       const resp = await generateContent(aiModel, prompt, undefined, true);
-      setChatHistory(prev => [...prev, { role: 'user', text: "生成修复补丁。" }, { role: 'model', text: resp }]);
+      setChatHistory(prev => [...prev, { role: 'user', text: ui.fixIssuesBtn }, { role: 'model', text: resp }]);
     } catch (e: any) {
       addToast(e.message, 'bad');
     } finally { setIsAiGenerating(false); }
@@ -231,6 +349,7 @@ export default function App() {
     const visibleIssues = issues.filter(i => {
       if (ignoredIssues.has(i.id)) return false;
       if (filterSeverity !== 'all' && i.severity !== filterSeverity) return false;
+      if (filterLocale !== 'all' && i.locale !== filterLocale) return false;
       if (filterText) {
         const t = filterText.toLowerCase();
         return i.key.toLowerCase().includes(t) || i.title.toLowerCase().includes(t) || i.currentValue.toLowerCase().includes(t);
@@ -238,12 +357,38 @@ export default function App() {
       return true;
     });
 
-    if (visibleIssues.length === 0) return "No issues found.";
+    if (visibleIssues.length === 0) {
+      if (uiLanguage === 'zh') {
+        return `# 本地化质量评估报告
+生成时间: ${new Date().toLocaleString()}
+
+## 总体状态
+✅ **未发现问题**
+
+## 分析
+- **流程成熟度**: 零缺陷结果验证了当前本地化流程和预防性维护策略的有效性。
+- **降低风险**: 此结果显著降低了与本地化错误相关的潜在停机和返工成本。
+- **资源效率**: 没有检测到缺陷，团队可以将资源分配给持续改进而不是修复。`;
+      } else {
+        return `# Localization QA Report
+Generated: ${new Date().toLocaleString()}
+
+## Overall Status
+✅ **No issues found**
+
+## Analysis
+- **Process Maturity**: The zero-defect result validates the effectiveness of current localization procedures and preventive maintenance strategies.
+- **Risk Reduction**: This outcome significantly minimizes potential downtime and rework costs associated with localization errors.
+- **Resource Efficiency**: The absence of detected defects allows the team to allocate resources towards continuous improvement rather than remediation.`;
+      }
+    }
     
-    // Generating English Report for international sharing
-    return `# Localization QA Report\nGenerated: ${new Date().toLocaleString()}\n\n` + 
-      visibleIssues.map(i => 
-      `## ${i.key}\n- **Locale**: ${i.locale}\n- **Severity**: ${i.severity.toUpperCase()}\n- **Rule**: ${i.ruleName}\n- **Issue**: ${i.title}\n- **Explanation**: ${i.explanation}\n- **Current**: \`${i.currentValue}\`\n- **Suggestion**: \`${i.suggestion || 'N/A'}\``
+    const header = uiLanguage === 'zh' ? 
+      `# 本地化质量评估报告\n生成时间: ${new Date().toLocaleString()}\n\n` :
+      `# Localization QA Report\nGenerated: ${new Date().toLocaleString()}\n\n`;
+
+    return header + visibleIssues.map(i => 
+      `## ${i.key}\n- **${uiLanguage==='zh'?'语言':'Locale'}**: ${i.locale}\n- **${uiLanguage==='zh'?'严重性':'Severity'}**: ${i.severity.toUpperCase()}\n- **${uiLanguage==='zh'?'规则':'Rule'}**: ${i.ruleName}\n- **${uiLanguage==='zh'?'问题':'Issue'}**: ${i.title}\n- **${uiLanguage==='zh'?'解释':'Explanation'}**: ${i.explanation}\n- **${uiLanguage==='zh'?'当前值':'Current'}**: \`${i.currentValue}\`\n- **${uiLanguage==='zh'?'建议':'Suggestion'}**: \`${i.suggestion || 'N/A'}\``
     ).join('\n\n');
   };
 
@@ -251,6 +396,7 @@ export default function App() {
     const visibleIssues = issues.filter(i => {
       if (ignoredIssues.has(i.id)) return false;
       if (filterSeverity !== 'all' && i.severity !== filterSeverity) return false;
+      if (filterLocale !== 'all' && i.locale !== filterLocale) return false;
       if (filterText) {
         const t = filterText.toLowerCase();
         return i.key.toLowerCase().includes(t) || i.title.toLowerCase().includes(t) || i.currentValue.toLowerCase().includes(t);
@@ -258,9 +404,28 @@ export default function App() {
       return true;
     });
 
-    if (visibleIssues.length === 0) return "";
+    if (visibleIssues.length === 0) {
+        if (uiLanguage === 'zh') {
+           return `质量检查简报:
+总体:
+未发现问题。
 
-    // Group issues by target locale
+分析:
+• 流程成熟度: 零缺陷结果验证了有效性。
+• 降低风险: 最小化返工成本。
+• 资源效率: 无缺陷。`;
+        } else {
+           return `Sanity Checker Report:
+Overall:
+No issues found.
+
+Analysis:
+• Process Maturity: The zero-defect result validates the effectiveness.
+• Risk Reduction: Minimizes rework costs.
+• Resource Efficiency: No defects detected.`;
+        }
+    }
+
     const groupedIssues: Record<string, typeof issues> = {};
     const categoriesSet = new Set<string>();
 
@@ -276,20 +441,24 @@ export default function App() {
     const categories = Array.from(categoriesSet).sort();
 
     // Generate Header Summary
-    let output = "Sanity Checker Report:\n";
-    output += "Overall:\n";
-    output += `Total ${affectedLocales.length} languages have issues:  ${affectedLocales.join(" / ")} / \n`;
-    output += `Total ${categories.length} issue categories: ${categories.join(", ")} \n`;
+    let output = uiLanguage === 'zh' ? "质量检查简报:\n" : "Sanity Checker Report:\n";
+    output += uiLanguage === 'zh' ? "总体:\n" : "Overall:\n";
+    output += uiLanguage === 'zh' 
+      ? `共 ${affectedLocales.length} 种语言存在问题:  ${affectedLocales.join(" / ")} / \n`
+      : `Total ${affectedLocales.length} languages have issues:  ${affectedLocales.join(" / ")} / \n`;
+    output += uiLanguage === 'zh'
+      ? `共 ${categories.length} 类问题: ${categories.join(", ")} \n`
+      : `Total ${categories.length} issue categories: ${categories.join(", ")} \n`;
 
     // Generate output organized by language blocks
     Object.entries(groupedIssues).sort((a, b) => a[0].localeCompare(b[0])).forEach(([locale, localeIssues]) => {
       output += `========================================\n`;
-      output += `Target Language: ${locale}\n`;
-      output += `Issues Found: ${localeIssues.length}\n`;
+      output += uiLanguage === 'zh' ? `目标语言: ${locale}\n` : `Target Language: ${locale}\n`;
+      output += uiLanguage === 'zh' ? `发现问题数: ${localeIssues.length}\n` : `Issues Found: ${localeIssues.length}\n`;
       output += `========================================\n\n`;
 
       output += localeIssues.map(i => 
-        `${i.key}\n● Issue: ${i.title}\n● Source: ${i.sourceValue || 'N/A'}\n● Target: ${i.currentValue}`
+        `${i.key}\n● ${uiLanguage==='zh'?'问题':'Issue'}: ${i.title}\n● ${uiLanguage==='zh'?'源文':'Source'}: ${i.sourceValue || 'N/A'}\n● ${uiLanguage==='zh'?'目标':'Target'}: ${i.currentValue}`
       ).join('\n\n');
 
       output += "\n\n\n";
@@ -302,23 +471,23 @@ export default function App() {
     const content = generateReportContent();
     try {
       await navigator.clipboard.writeText(content);
-      addToast("分析报告已复制到剪贴板", "ok");
+      addToast(ui.copyReportOk, "ok");
     } catch (err) {
-      addToast("复制失败", "bad");
+      addToast(ui.copyFail, "bad");
     }
   };
 
   const handleCopyLite = async () => {
     const content = generateLiteContent();
     if (!content) {
-      addToast("无内容可复制", "warn");
+      addToast(ui.noContentExport, "warn");
       return;
     }
     try {
       await navigator.clipboard.writeText(content);
-      addToast("精简简报已复制 (按语种分组)", "ok");
+      addToast(ui.copyLiteOk, "ok");
     } catch (err) {
-      addToast("复制失败", "bad");
+      addToast(ui.copyFail, "bad");
     }
   };
 
@@ -331,17 +500,99 @@ export default function App() {
     a.click();
   };
 
+  const handleCopyAiReport = async () => {
+    if (chatHistory.length === 0) {
+      addToast(ui.noContentExport, "warn");
+      return;
+    }
+
+    const textContent = chatHistory.map(msg => {
+      const role = msg.role === 'user' ? 'USER' : 'GEMINI AUDIT EXPERT';
+      return `[${role}]\n${msg.text}\n`;
+    }).join('\n----------------------------------------\n\n');
+
+    try {
+      await navigator.clipboard.writeText(textContent);
+      addToast(ui.copyAiOk, "ok");
+    } catch (err) {
+      addToast(ui.copyFail, "bad");
+    }
+  };
+
+  const handleDownloadAiReport = () => {
+    if (chatHistory.length === 0) {
+      addToast(ui.noContentExport, "warn");
+      return;
+    }
+
+    const rTitle = uiLanguage === 'zh' ? "语言学审计报告" : "Linguistic Audit Report";
+    const rGen = uiLanguage === 'zh' ? "生成时间" : "Generated";
+
+    const htmlContent = `<!DOCTYPE html>
+<html lang="${uiLanguage === 'zh' ? 'zh-CN' : 'en'}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${rTitle} - Translation Checker Pro</title>
+<style>
+  body { background-color: #0b0f19; color: #e2e8f0; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; margin: 0; padding: 20px; }
+  .container { max-width: 900px; margin: 0 auto; }
+  .header { text-align: center; border-bottom: 1px solid #1e293b; padding-bottom: 20px; margin-bottom: 30px; }
+  .header h1 { color: #818cf8; margin: 0 0 10px 0; font-size: 24px; }
+  .meta { color: #64748b; font-size: 12px; }
+  .message-row { display: flex; margin-bottom: 24px; }
+  .message-row.user { justify-content: flex-end; }
+  .message-row.model { justify-content: flex-start; }
+  .bubble { max-width: 85%; padding: 16px; border-radius: 12px; font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-wrap: break-word; }
+  .user .bubble { background-color: #4f46e5; color: white; border-bottom-right-radius: 2px; }
+  .model .bubble { background-color: #1e293b; color: #cbd5e1; border: 1px solid #334155; border-bottom-left-radius: 2px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+  .role { font-size: 11px; margin-bottom: 6px; font-weight: bold; opacity: 0.7; text-transform: uppercase; letter-spacing: 0.5px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>${rTitle}</h1>
+    <div class="meta">${rGen}: ${new Date().toLocaleString()}</div>
+  </div>
+  <div class="chat">
+    ${chatHistory.map(msg => `
+      <div class="message-row ${msg.role}">
+        <div class="bubble">
+          <div class="role">${msg.role === 'user' ? 'USER' : 'GEMINI AUDIT EXPERT'}</div>
+          ${msg.text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")}
+        </div>
+      </div>
+    `).join('')}
+  </div>
+</div>
+</body>
+</html>`;
+
+    const blob = new Blob([htmlContent], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `linguistic-audit-report-${Date.now()}.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    addToast(ui.exportOk, "ok");
+  };
+
   const filteredIssues = useMemo(() => {
     return issues.filter(i => {
       if (ignoredIssues.has(i.id)) return false;
       if (filterSeverity !== 'all' && i.severity !== filterSeverity) return false;
+      if (filterLocale !== 'all' && i.locale !== filterLocale) return false;
       if (filterText) {
         const t = filterText.toLowerCase();
         return i.key.toLowerCase().includes(t) || i.title.toLowerCase().includes(t) || i.currentValue.toLowerCase().includes(t);
       }
       return true;
     });
-  }, [issues, ignoredIssues, filterSeverity, filterText]);
+  }, [issues, ignoredIssues, filterSeverity, filterLocale, filterText]);
 
   const groupedIssues = useMemo(() => {
     const map = new Map<string, typeof issues>();
@@ -362,17 +613,26 @@ export default function App() {
 
       {/* --- Left Column --- */}
       <div className="lg:col-span-5 flex flex-col gap-6">
-        <header className="mb-2">
-          <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-indigo-400">Translation Checker Pro</h1>
-          <p className="text-slate-400 text-sm mt-1 flex items-center gap-2">
-            <Sparkles size={14} className="text-indigo-400" /> 深度语言学质量评估 (Linguistic QA)
-          </p>
+        <header className="mb-2 flex items-start justify-between">
+          <div>
+            <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-indigo-400">{ui.appTitle}</h1>
+            <p className="text-slate-400 text-sm mt-1 flex items-center gap-2">
+              <Sparkles size={14} className="text-indigo-400" /> {ui.appSubtitle}
+            </p>
+          </div>
+          <button 
+            onClick={() => setUiLanguage(l => l === 'zh' ? 'en' : 'zh')}
+            className="flex items-center gap-1 px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs border border-slate-700 transition font-mono"
+            title="Switch Language / 切换语言"
+          >
+            <Languages size={14} /> {uiLanguage === 'zh' ? 'EN' : '中文'}
+          </button>
         </header>
 
         <section className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden shadow-2xl">
           <div className="p-4 bg-slate-800/50 border-b border-slate-700 flex justify-between items-center">
             <h2 className="font-semibold text-slate-200 flex items-center gap-2">
-              <FileCode size={18} className="text-blue-400"/> 输入数据
+              <FileCode size={18} className="text-blue-400"/> {ui.inputData}
             </h2>
           </div>
           <div className="p-4 space-y-4">
@@ -384,10 +644,10 @@ export default function App() {
             />
             <div className="flex flex-wrap gap-2">
               <button onClick={handleAnalyze} disabled={isAnalyzing} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition flex items-center gap-2 shadow-lg shadow-indigo-900/20">
-                <Play size={16} className={isAnalyzing ? "animate-spin" : ""}/> 运行分析
+                <Play size={16} className={isAnalyzing ? "animate-spin" : ""}/> {ui.runAnalysis}
               </button>
               <button onClick={handleLinguisticAudit} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-sm text-slate-300 transition flex items-center gap-2">
-                <Microscope size={16} className="text-emerald-400"/> 语言学审计 (AI)
+                <Microscope size={16} className="text-emerald-400"/> {ui.linguisticAudit}
               </button>
             </div>
           </div>
@@ -396,7 +656,7 @@ export default function App() {
         <section className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden">
           <div className="p-4 bg-slate-800/50 border-b border-slate-700 flex justify-between items-center">
             <h2 className="font-semibold text-slate-200 flex items-center gap-2">
-              <AlertTriangle size={18} className="text-amber-400"/> 活动规则
+              <AlertTriangle size={18} className="text-amber-400"/> {ui.rules}
             </h2>
           </div>
           <div className="p-2 max-h-48 overflow-y-auto space-y-1">
@@ -423,25 +683,38 @@ export default function App() {
       {/* --- Right Column --- */}
       <div className="lg:col-span-7 flex flex-col h-[calc(100vh-3rem)] sticky top-6">
         <div className="flex gap-2 mb-4 bg-slate-900/80 p-1 rounded-lg border border-slate-800 w-fit">
-          <button onClick={() => setActiveTab('results')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition ${activeTab === 'results' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}>分析结果</button>
-          <button onClick={() => setActiveTab('ai')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition ${activeTab === 'ai' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}>Gemini 审计专家</button>
+          <button onClick={() => setActiveTab('results')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition ${activeTab === 'results' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}>{ui.resultsTab}</button>
+          <button onClick={() => setActiveTab('ai')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition ${activeTab === 'ai' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}>{ui.aiTab}</button>
         </div>
 
         <div className="flex-1 bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden shadow-2xl flex flex-col min-h-0">
           {activeTab === 'results' && (
             <div className="flex flex-col h-full">
               <div className="p-4 border-b border-slate-800">
-                <Stats issues={issues} ignoredIds={ignoredIssues} />
+                <Stats issues={filteredIssues} ignoredIds={ignoredIssues} uiLanguage={uiLanguage} />
                 <div className="flex flex-wrap gap-2 items-center mt-4">
                    <select value={filterSeverity} onChange={(e) => setFilterSeverity(e.target.value)} className="bg-slate-950 border border-slate-800 rounded px-3 py-1.5 text-xs text-slate-400 outline-none">
-                     <option value="all">所有问题</option>
-                     <option value="critical">仅致命错误</option>
-                     <option value="high">高严重性及以上</option>
+                     <option value="all">{ui.allIssues}</option>
+                     <option value="critical">{ui.criticalOnly}</option>
+                     <option value="high">{ui.highPlus}</option>
                    </select>
-                   <input type="text" placeholder="搜索 key 或内容..." value={filterText} onChange={(e) => setFilterText(e.target.value)} className="bg-slate-950 border border-slate-800 rounded px-3 py-1.5 text-xs text-slate-400 outline-none flex-1" />
-                   <button onClick={handleCopyLite} className="p-2 text-slate-500 hover:text-white transition" title="复制精简报告 (Lite)"><ClipboardList size={18}/></button>
-                   <button onClick={handleCopyReport} className="p-2 text-slate-500 hover:text-white transition" title="复制完整报告 (MD)"><Copy size={18}/></button>
-                   <button onClick={downloadReport} className="p-2 text-slate-500 hover:text-white transition" title="导出报告"><Download size={18}/></button>
+
+                   <div className="relative">
+                      <div className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
+                        <Globe size={12} className="text-slate-500"/>
+                      </div>
+                      <select value={filterLocale} onChange={(e) => setFilterLocale(e.target.value)} className="bg-slate-950 border border-slate-800 rounded pl-8 pr-3 py-1.5 text-xs text-slate-400 outline-none appearance-none hover:border-slate-700 transition cursor-pointer">
+                        <option value="all">{ui.allLanguages}</option>
+                        {targetLocales.map(l => (
+                          <option key={l} value={l}>{l}</option>
+                        ))}
+                      </select>
+                   </div>
+
+                   <input type="text" placeholder={ui.searchPlaceholder} value={filterText} onChange={(e) => setFilterText(e.target.value)} className="bg-slate-950 border border-slate-800 rounded px-3 py-1.5 text-xs text-slate-400 outline-none flex-1" />
+                   <button onClick={handleCopyLite} className="p-2 text-slate-500 hover:text-white transition" title={ui.liteReport}><ClipboardList size={18}/></button>
+                   <button onClick={handleCopyReport} className="p-2 text-slate-500 hover:text-white transition" title={ui.fullReport}><Copy size={18}/></button>
+                   <button onClick={downloadReport} className="p-2 text-slate-500 hover:text-white transition" title={ui.exportReport}><Download size={18}/></button>
                 </div>
               </div>
               
@@ -449,14 +722,14 @@ export default function App() {
                 {groupedIssues.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-slate-600">
                      <Microscope size={48} className="mb-4 opacity-20"/>
-                     <p>运行分析以查看本地化问题。</p>
+                     <p>{uiLanguage === 'zh' ? '运行分析以查看本地化问题。' : 'Run analysis to view localization issues.'}</p>
                   </div>
                 ) : (
                   groupedIssues.map(([key, groupIssues]) => (
                     <div key={key} className="bg-slate-800/30 border border-slate-700/50 rounded-lg overflow-hidden">
                       <div className="p-3 bg-slate-800/60 flex justify-between items-center">
                         <span className="font-mono text-[10px] text-blue-300/80 truncate font-semibold flex-1">{key}</span>
-                        {!groupIssues.some(i => i.sourceValue) && <span className="ml-2 text-[9px] px-1.5 py-0.5 bg-emerald-900/30 text-emerald-400 border border-emerald-800/50 rounded uppercase font-bold tracking-wider">单语评估模式 (Unilingual)</span>}
+                        {!groupIssues.some(i => i.sourceValue) && <span className="ml-2 text-[9px] px-1.5 py-0.5 bg-emerald-900/30 text-emerald-400 border border-emerald-800/50 rounded uppercase font-bold tracking-wider">{ui.unilingualTag}</span>}
                       </div>
                       <div className="divide-y divide-slate-800/50">
                         {groupIssues.map(issue => (
@@ -473,17 +746,17 @@ export default function App() {
                             <div className="bg-slate-950/50 p-2 rounded border border-slate-800/50 space-y-2">
                               {issue.sourceValue && (
                                 <div className="grid grid-cols-[50px_1fr] gap-2 items-start">
-                                  <span className="text-[9px] text-slate-600 text-right mt-0.5">源文</span>
+                                  <span className="text-[9px] text-slate-600 text-right mt-0.5">{ui.source}</span>
                                   <span className="text-[10px] font-mono text-slate-400 break-all">{issue.sourceValue}</span>
                                 </div>
                               )}
                               <div className="grid grid-cols-[50px_1fr] gap-2 items-start">
-                                <span className="text-[9px] text-blue-500 text-right mt-0.5">目标</span>
+                                <span className="text-[9px] text-blue-500 text-right mt-0.5">{ui.target}</span>
                                 <span className="text-[10px] font-mono text-slate-200 break-all">{issue.currentValue}</span>
                               </div>
                               {issue.suggestion && (
                                 <div className="grid grid-cols-[50px_1fr] gap-2 items-start pt-1 border-t border-slate-800">
-                                  <span className="text-[9px] text-emerald-500 text-right mt-0.5">修复</span>
+                                  <span className="text-[9px] text-emerald-500 text-right mt-0.5">{ui.fix}</span>
                                   <span className="text-[10px] text-emerald-300 break-all">{issue.suggestion}</span>
                                 </div>
                               )}
@@ -503,17 +776,25 @@ export default function App() {
                <div className="p-3 bg-indigo-900/10 border-b border-indigo-900/30 flex justify-between items-center">
                  <div className="flex items-center gap-2">
                    <Wand2 size={16} className="text-indigo-400"/>
-                   <span className="text-sm font-semibold text-indigo-100">语言学审计专家</span>
+                   <span className="text-sm font-semibold text-indigo-100">{ui.aiTab}</span>
+                 </div>
+                 <div className="flex gap-2">
+                    <button onClick={handleCopyAiReport} className="text-xs flex items-center gap-1 px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded transition" title={ui.copyContent}>
+                      <Copy size={14} /> {ui.copyContent}
+                    </button>
+                    <button onClick={handleDownloadAiReport} className="text-xs flex items-center gap-1 px-2 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded transition" title={ui.exportAiReport}>
+                      <Download size={14} /> {ui.exportAiReport}
+                    </button>
                  </div>
                </div>
                <div className="flex-1 overflow-y-auto p-4 space-y-6">
                  {chatHistory.length === 0 && (
                    <div className="text-center text-slate-500 mt-12 px-8 space-y-6">
                      <Microscope size={48} className="mx-auto opacity-10" />
-                     <p className="text-sm">欢迎使用 AI 审计助手。我可以审查翻译的语法、风格和文化细微差别——即使没有源文也可以进行评估。</p>
+                     <p className="text-sm">{ui.welcomeAi}</p>
                      <div className="flex flex-wrap justify-center gap-2">
-                        <button onClick={handleLinguisticAudit} className="px-4 py-2 bg-indigo-600/20 text-indigo-300 rounded-full text-xs border border-indigo-600/30 hover:bg-indigo-600/40 transition">🚀 运行深度质量审计报告</button>
-                        <button onClick={handleGeneratePatch} className="px-4 py-2 bg-slate-800 text-slate-400 rounded-full text-xs border border-slate-700 hover:text-white transition">🛠 自动修复规则违规</button>
+                        <button onClick={handleLinguisticAudit} className="px-4 py-2 bg-indigo-600/20 text-indigo-300 rounded-full text-xs border border-indigo-600/30 hover:bg-indigo-600/40 transition">{ui.runAuditBtn}</button>
+                        <button onClick={handleGeneratePatch} className="px-4 py-2 bg-slate-800 text-slate-400 rounded-full text-xs border border-slate-700 hover:text-white transition">{ui.fixIssuesBtn}</button>
                      </div>
                    </div>
                  )}
@@ -530,7 +811,7 @@ export default function App() {
                </div>
                <div className="p-4 bg-slate-900/80 border-t border-slate-800">
                  <div className="flex gap-2">
-                   <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && !isAiGenerating && handleAiSend()} placeholder="向专家咨询语言建议..." disabled={isAiGenerating} className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-sm text-slate-300 focus:outline-none focus:border-indigo-500 transition" />
+                   <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && !isAiGenerating && handleAiSend()} placeholder={ui.inputPlaceholder} disabled={isAiGenerating} className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-sm text-slate-300 focus:outline-none focus:border-indigo-500 transition" />
                    <button onClick={handleAiSend} disabled={isAiGenerating || !chatInput} className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white p-2 rounded-lg transition">
                      <ChevronRight size={20}/>
                    </button>
