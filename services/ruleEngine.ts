@@ -92,6 +92,12 @@ export const createDefaultRules = (
       icuExpl: "发现不匹配的 '{' 或 '}'。这将导致大多数 i18n 引擎崩溃。",
       icuSugg: "修复花括号嵌套。",
 
+      icuHash: "ICU 数值占位符 (#)",
+      icuHashDesc: "检查复数/序数格式中是否保留了 # (数值) 符号。",
+      icuHashTitle: "# 占位符丢失",
+      icuHashExpl: "源文在 plural/selectordinal 结构中使用了 # 来动态显示数值，但译文完全缺失此符号。",
+      icuHashSugg: "请在译文对应的分支中恢复 #。",
+
       whitespace: "空格完整性",
       whitespaceDesc: "首尾空格或双空格。",
       whitespaceTrimTitle: "修剪问题",
@@ -150,6 +156,12 @@ export const createDefaultRules = (
       icuExpl: "Found mismatched '{' or '}'. This will crash most i18n engines.",
       icuSugg: "Fix brace nesting.",
 
+      icuHash: "ICU Numeric Placeholder (#)",
+      icuHashDesc: "Checks if the '#' (value) symbol is preserved in plural/ordinal formats.",
+      icuHashTitle: "Missing '#' Placeholder",
+      icuHashExpl: "Source uses '#' for dynamic values in a plural/selectordinal block, but target is missing it.",
+      icuHashSugg: "Restore '#' in the translation branches.",
+
       whitespace: "Whitespace Integrity",
       whitespaceDesc: "Leading/trailing spaces or double spaces.",
       whitespaceTrimTitle: "Trim issue",
@@ -180,6 +192,28 @@ export const createDefaultRules = (
   }[lang];
 
   return [
+    {
+      id: "icu-hash",
+      name: T.icuHash,
+      severity: "high",
+      description: T.icuHashDesc,
+      check: ({ value, srcValue }) => {
+        if (!srcValue || !value) return null;
+        // Heuristic: Source has ICU structure AND '#' inside it
+        // Regex checks for { ... , plural|selectordinal ... }
+        const isIcuPlural = /{[^}]+,\s*(?:plural|selectordinal)/i.test(srcValue);
+        if (isIcuPlural && srcValue.includes('#')) {
+          if (!value.includes('#')) {
+            return {
+              title: T.icuHashTitle,
+              explanation: T.icuHashExpl,
+              suggestion: T.icuHashSugg
+            };
+          }
+        }
+        return null;
+      }
+    },
     {
       id: "brand-consistency",
       name: T.brand,
