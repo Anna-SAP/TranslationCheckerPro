@@ -111,7 +111,13 @@ export const createDefaultRules = (
       structureDesc: "确保译文保留源文首尾的结构性符号（如 []、()、{}）。",
       structureTitle: "结构符号丢失",
       structureExpl: (char: string, pos: string) => `源文在${pos}包含 '${char}'，但译文缺失。`,
-      structureSugg: (char: string, pos: string) => `请在译文${pos}补充 '${char}'。`
+      structureSugg: (char: string, pos: string) => `请在译文${pos}补充 '${char}'。`,
+
+      brand: "品牌一致性 (DNT)",
+      brandDesc: "严禁将品牌词 (如 RingCentral) 替换为 RingEX 或翻译。",
+      brandTitle: "DNT 术语违规",
+      brandExpl: (found: string) => found ? `检测到非法品牌替换：'${found}'。源文使用的是 'RingCentral'。` : "译文缺失 DNT 术语 'RingCentral'。",
+      brandSugg: "必须保留 'RingCentral'，请勿翻译或替换。"
     },
     en: {
       missingSource: "Unilingual Mode",
@@ -163,11 +169,50 @@ export const createDefaultRules = (
       structureDesc: "Ensure target preserves structural symbols (e.g. [], (), {}) at start/end.",
       structureTitle: "Missing Structural Symbol",
       structureExpl: (char: string, pos: string) => `Source has '${char}' at the ${pos}, but target is missing it.`,
-      structureSugg: (char: string, pos: string) => `Add '${char}' at the ${pos}.`
+      structureSugg: (char: string, pos: string) => `Add '${char}' at the ${pos}.`,
+
+      brand: "Brand Consistency (DNT)",
+      brandDesc: "Strictly forbids replacing brand terms (e.g. RingCentral) with RingEX or translating them.",
+      brandTitle: "DNT Violation",
+      brandExpl: (found: string) => found ? `Illegal brand replacement detected: '${found}'. Source uses 'RingCentral'.` : "Target is missing DNT term 'RingCentral'.",
+      brandSugg: "Must preserve 'RingCentral'. Do not translate or replace."
     }
   }[lang];
 
   return [
+    {
+      id: "brand-consistency",
+      name: T.brand,
+      severity: "critical",
+      description: T.brandDesc,
+      check: ({ value, srcValue }) => {
+        if (!srcValue || !value) return null;
+        
+        // DNT configuration
+        const dntTerm = "RingCentral";
+        const forbiddenReplacements = ["RingEX", "RingEx", "RC"]; 
+
+        if (srcValue.includes(dntTerm)) {
+          if (!value.includes(dntTerm)) {
+            // It's missing. Check if it was replaced by a forbidden term.
+            let foundReplacement = "";
+            for (const bad of forbiddenReplacements) {
+              if (value.includes(bad)) {
+                foundReplacement = bad;
+                break;
+              }
+            }
+            
+            return {
+              title: T.brandTitle,
+              explanation: T.brandExpl(foundReplacement),
+              suggestion: T.brandSugg
+            };
+          }
+        }
+        return null;
+      }
+    },
     {
       id: "structural-mirroring",
       name: T.structure,
