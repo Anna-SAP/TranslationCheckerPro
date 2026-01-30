@@ -123,7 +123,13 @@ export const createDefaultRules = (
       brandDesc: "严禁将品牌词 (如 RingCentral) 替换为 RingEX 或翻译。",
       brandTitle: "DNT 术语违规",
       brandExpl: (found: string) => found ? `检测到非法品牌替换：'${found}'。源文使用的是 'RingCentral'。` : "译文缺失 DNT 术语 'RingCentral'。",
-      brandSugg: "必须保留 'RingCentral'，请勿翻译或替换。"
+      brandSugg: "必须保留 'RingCentral'，请勿翻译或替换。",
+
+      productCasing: "产品名称大小写 (Call Queues Booster)",
+      productCasingDesc: "在英语区域中强制 'Call Queues Booster' 保持 Title Case。",
+      productCasingTitle: "产品名大小写错误",
+      productCasingExpl: (found: string) => `检测到错误的大小写：'${found}'。在英文中必须为 'Call Queues Booster'。`,
+      productCasingSugg: "请修正为 'Call Queues Booster'。"
     },
     en: {
       missingSource: "Unilingual Mode",
@@ -187,11 +193,42 @@ export const createDefaultRules = (
       brandDesc: "Strictly forbids replacing brand terms (e.g. RingCentral) with RingEX or translating them.",
       brandTitle: "DNT Violation",
       brandExpl: (found: string) => found ? `Illegal brand replacement detected: '${found}'. Source uses 'RingCentral'.` : "Target is missing DNT term 'RingCentral'.",
-      brandSugg: "Must preserve 'RingCentral'. Do not translate or replace."
+      brandSugg: "Must preserve 'RingCentral'. Do not translate or replace.",
+
+      productCasing: "Product Name Casing (Call Queues Booster)",
+      productCasingDesc: "Enforce Title Case for 'Call Queues Booster' in English locales.",
+      productCasingTitle: "Product Name Casing Error",
+      productCasingExpl: (found: string) => `Incorrect casing detected: '${found}'. Must be 'Call Queues Booster'.`,
+      productCasingSugg: "Change to 'Call Queues Booster'."
     }
   }[lang];
 
   return [
+    {
+      id: "product-casing-cqb",
+      name: T.productCasing,
+      severity: "critical",
+      description: T.productCasingDesc,
+      check: ({ value, locale }) => {
+        // Rule applies to English locales (en-US, en-GB, en-AU, etc.)
+        if (!locale.startsWith('en')) return null;
+
+        const term = "Call Queues Booster";
+        const regex = /call queues booster/ig;
+        let match;
+        
+        while ((match = regex.exec(value)) !== null) {
+          if (match[0] !== term) {
+            return {
+              title: T.productCasingTitle,
+              explanation: T.productCasingExpl(match[0]),
+              suggestion: T.productCasingSugg
+            };
+          }
+        }
+        return null;
+      }
+    },
     {
       id: "icu-hash",
       name: T.icuHash,
